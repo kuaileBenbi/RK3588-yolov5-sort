@@ -1,0 +1,8 @@
+model
+data
+build
+sortgithub
+# .开头的任何文件
+.*
+# 排除 .gitignore 本身
+!/.gitignore
