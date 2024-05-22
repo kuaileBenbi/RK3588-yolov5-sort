@@ -1,5 +1,13 @@
-///////////////////////////////////////////////////////////////////////////////
-// KalmanTracker.h: KalmanTracker Class Declaration
+/*================================================================
+*   Copyright (C) 2021 * Ltd. All rights reserved.
+*
+*   Editor      : VIM
+*   File name   : KalmanTracker.h
+*   Author      : YunYang1994
+*   Created date: 2021-07-21 14:20:53
+*   Description :
+*
+*===============================================================*/
 
 #ifndef KALMAN_H
 #define KALMAN_H 2
@@ -7,10 +15,7 @@
 #include "opencv2/video/tracking.hpp"
 #include "opencv2/highgui/highgui.hpp"
 
-using namespace std;
-using namespace cv;
-
-#define StateType Rect_<float>
+#define StateType cv::Rect_<float>
 
 
 // This class represents the internel state of individual tracked objects observed as bounding box.
@@ -19,17 +24,16 @@ class KalmanTracker
 public:
 	KalmanTracker()
 	{
-		init_kf(StateType());
+		InitKf(StateType());
 		m_time_since_update = 0;
 		m_hits = 0;
 		m_hit_streak = 0;
 		m_age = 0;
 		m_id = kf_count;
-		//kf_count++;
 	}
-	KalmanTracker(StateType initRect)
+	KalmanTracker(StateType init_rect)
 	{
-		init_kf(initRect);
+		InitKf(init_rect);
 		m_time_since_update = 0;
 		m_hits = 0;
 		m_hit_streak = 0;
@@ -43,11 +47,11 @@ public:
 		m_history.clear();
 	}
 
-	StateType predict();
-	void update(StateType stateMat);
-	
-	StateType get_state();
-	StateType get_rect_xysr(float cx, float cy, float s, float r);
+	StateType Predict();
+	void Update(StateType state_mat);
+
+	StateType GetState();
+	StateType convert_x_to_bbox(float cx, float cy, float s, float r);
 
 	static int kf_count;
 
@@ -56,17 +60,15 @@ public:
 	int m_hit_streak;
 	int m_age;
 	int m_id;
+	std::string m_det_name;
 
 private:
-	void init_kf(StateType stateMat);
+	void InitKf(StateType state_mat);
 
 	cv::KalmanFilter kf;
 	cv::Mat measurement;
 
 	std::vector<StateType> m_history;
 };
-
-
-
 
 #endif

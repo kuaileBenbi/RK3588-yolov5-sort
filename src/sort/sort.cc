@@ -1,327 +1,183 @@
+/*================================================================
+*   Copyright (C) 2021 * Ltd. All rights reserved.
+*
+*   Editor      : VIM
+*   File name   : sort.cc
+*   Author      : YunYang1994
+*   Created date: 2021-08-11 20:31:32
+*   Description :
+*
+*===============================================================*/
+
+
+#include "sort.h"
 #include "Hungarian.h"
 #include "KalmanTracker.h"
-#include "sort.h"
 
-// Computes IOU between two bounding boxes
-double GetIOU(Rect_<float> bb_test, Rect_<float> bb_gt)
+#include <atomic>
+#include <vector>
+#include <cfloat> // for DBL_MAX
+#include <iomanip>    // to format image names using setw() and setfill()
+#include <unistd.h>   // to check file existence using POSIX function access(). On Linux include <unistd.h>.
+
+
+class Sort: public TrackingSession
 {
-	float in = (bb_test & bb_gt).area();
-	float un = bb_test.area() + bb_gt.area() - in;
+public:
+    Sort(int max_age, int min_hits, float iou_threshold):
+        m_max_age(max_age), m_min_hits(min_hits), m_iou_threshold(iou_threshold)
+    {
+        m_frame_count = 0;
+        m_trackers = {};
+        ms_num_session++;
+    }
+    std::vector<TrackingBox> Update(const std::vector<DetectionBox> &dets) override;
+    ~Sort() { ms_num_session--; };
 
-	if (un < DBL_EPSILON)
-		return 0;
+private:
+    float m_iou_threshold;
+    int m_max_age, m_min_hits, m_frame_count;
+    std::vector<KalmanTracker> m_trackers;
 
-	return (double)(in / un);
+    static std::atomic<int> ms_num_session;
+};
+
+std::atomic<int> Sort::ms_num_session(0);
+
+TrackingSession *CreateSession(int max_age, int min_hits, float iou_threshold) {
+    return new Sort(max_age, min_hits, iou_threshold);
 }
 
 
-// global variables for counting
-#define CNUM 20
-int total_frames = 0;
-double total_time = 0.0;
-
-void TestSORT(string seqName, bool display);
-
-
-
-int main()
-{
-	vector<string> sequences = { "PETS09-S2L1", "TUD-Campus", "TUD-Stadtmitte", "ETH-Bahnhof", "ETH-Sunnyday", "ETH-Pedcross2", "KITTI-13", "KITTI-17", "ADL-Rundle-6", "ADL-Rundle-8", "Venice-2" };
-	for (auto seq : sequences)
-		TestSORT(seq, false);
-	//TestSORT("PETS09-S2L1", true);
-
-	// Note: time counted here is of tracking procedure, while the running speed bottleneck is opening and parsing detectionFile.
-	cout << "Total Tracking took: " << total_time << " for " << total_frames << " frames or " << ((double)total_frames / (double)total_time) << " FPS" << endl;
-
-	return 0;
+void ReleaseSession(TrackingSession **session_ptr) {
+    if (session_ptr && *session_ptr) {
+        delete *session_ptr;
+        session_ptr = nullptr;
+    }
 }
 
 
-
-void TestSORT(string seqName, bool display)
+static double compute_iou(cv::Rect_<float> bb_test, cv::Rect_<float> bb_gt)
 {
-	cout << "Processing " << seqName << "..." << endl;
+    float intersection_area = (bb_test & bb_gt).area();
+    float union_area = bb_test.area() + bb_gt.area() - intersection_area;
 
-	// 0. randomly generate colors, only for display
-	RNG rng(0xFFFFFFFF);
-	Scalar_<int> randColor[CNUM];
-	for (int i = 0; i < CNUM; i++)
-		rng.fill(randColor[i], RNG::UNIFORM, 0, 256);
-
-	string imgPath = "D:/Data/Track/2DMOT2015/train/" + seqName + "/img1/";
-
-	if (display)
-		if (_access(imgPath.c_str(), 0) == -1)
-		{
-			cerr << "Image path not found!" << endl;
-			display = false;
-		}
-
-	// 1. read detection file
-	ifstream detectionFile;
-	string detFileName = "data/" + seqName + "/det.txt";
-	detectionFile.open(detFileName);
-
-	if (!detectionFile.is_open())
-	{
-		cerr << "Error: can not find file " << detFileName << endl;
-		return;
-	}
-
-	string detLine;
-	istringstream ss;
-	vector<TrackingBox> detData;
-	char ch;
-	float tpx, tpy, tpw, tph;
-
-	while ( getline(detectionFile, detLine) )
-	{
-		TrackingBox tb;
-
-		ss.str(detLine);
-		ss >> tb.frame >> ch >> tb.id >> ch;
-		ss >> tpx >> ch >> tpy >> ch >> tpw >> ch >> tph;
-		ss.str("");
-
-		tb.box = Rect_<float>(Point_<float>(tpx, tpy), Point_<float>(tpx + tpw, tpy + tph));
-		detData.push_back(tb);
-	}
-	detectionFile.close();
-
-	// 2. group detData by frame
-	int maxFrame = 0;
-	for (auto tb : detData) // find max frame number
-	{
-		if (maxFrame < tb.frame)
-			maxFrame = tb.frame;
-	}
-
-	vector<vector<TrackingBox>> detFrameData;
-	vector<TrackingBox> tempVec;
-	for (int fi = 0; fi < maxFrame; fi++)
-	{
-		for (auto tb : detData)
-			if (tb.frame == fi + 1) // frame num starts from 1
-				tempVec.push_back(tb);
-		detFrameData.push_back(tempVec);
-		tempVec.clear();
-	}
-
-	// 3. update across frames
-	int frame_count = 0;
-	int max_age = 1;
-	int min_hits = 3;
-	double iouThreshold = 0.3;
-	vector<KalmanTracker> trackers;
-	KalmanTracker::kf_count = 0; // tracking id relies on this, so we have to reset it in each seq.
-
-	// variables used in the for-loop
-	vector<Rect_<float>> predictedBoxes;
-	vector<vector<double>> iouMatrix;
-	vector<int> assignment;
-	set<int> unmatchedDetections;
-	set<int> unmatchedTrajectories;
-	set<int> allItems;
-	set<int> matchedItems;
-	vector<cv::Point> matchedPairs;
-	vector<TrackingBox> frameTrackingResult;
-	unsigned int trkNum = 0;
-	unsigned int detNum = 0;
-
-	double cycle_time = 0.0;
-	int64 start_time = 0;
-
-	// prepare result file.
-	ofstream resultsFile;
-	string resFileName = "output/" + seqName + ".txt";
-	resultsFile.open(resFileName);
-
-	if (!resultsFile.is_open())
-	{
-		cerr << "Error: can not create file " << resFileName << endl;
-		return;
-	}
-
-	//////////////////////////////////////////////
-	// main loop
-	for (int fi = 0; fi < maxFrame; fi++)
-	{
-		total_frames++;
-		frame_count++;
-		//cout << frame_count << endl;
-
-		// I used to count running time using clock(), but found it seems to conflict with cv::cvWaitkey(),
-		// when they both exists, clock() can not get right result. Now I use cv::getTickCount() instead.
-		start_time = getTickCount();
-
-		if (trackers.size() == 0) // the first frame met
-		{
-			// initialize kalman trackers using first detections.
-			for (unsigned int i = 0; i < detFrameData[fi].size(); i++)
-			{
-				KalmanTracker trk = KalmanTracker(detFrameData[fi][i].box);
-				trackers.push_back(trk);
-			}
-			// output the first frame detections
-			for (unsigned int id = 0; id < detFrameData[fi].size(); id++)
-			{
-				TrackingBox tb = detFrameData[fi][id];
-				resultsFile << tb.frame << "," << id + 1 << "," << tb.box.x << "," << tb.box.y << "," << tb.box.width << "," << tb.box.height << ",1,-1,-1,-1" << endl;
-			}
-			continue;
-		}
-
-		///////////////////////////////////////
-		// 3.1. get predicted locations from existing trackers.
-		predictedBoxes.clear();
-
-		for (auto it = trackers.begin(); it != trackers.end();)
-		{
-			Rect_<float> pBox = (*it).predict();
-			if (pBox.x >= 0 && pBox.y >= 0)
-			{
-				predictedBoxes.push_back(pBox);
-				it++;
-			}
-			else
-			{
-				it = trackers.erase(it);
-				//cerr << "Box invalid at frame: " << frame_count << endl;
-			}
-		}
-
-		///////////////////////////////////////
-		// 3.2. associate detections to tracked object (both represented as bounding boxes)
-		// dets : detFrameData[fi]
-		trkNum = predictedBoxes.size();
-		detNum = detFrameData[fi].size();
-
-		iouMatrix.clear();
-		iouMatrix.resize(trkNum, vector<double>(detNum, 0));
-
-		for (unsigned int i = 0; i < trkNum; i++) // compute iou matrix as a distance matrix
-		{
-			for (unsigned int j = 0; j < detNum; j++)
-			{
-				// use 1-iou because the hungarian algorithm computes a minimum-cost assignment.
-				iouMatrix[i][j] = 1 - GetIOU(predictedBoxes[i], detFrameData[fi][j].box);
-			}
-		}
-
-		// solve the assignment problem using hungarian algorithm.
-		// the resulting assignment is [track(prediction) : detection], with len=preNum
-		HungarianAlgorithm HungAlgo;
-		assignment.clear();
-		HungAlgo.Solve(iouMatrix, assignment);
-
-		// find matches, unmatched_detections and unmatched_predictions
-		unmatchedTrajectories.clear();
-		unmatchedDetections.clear();
-		allItems.clear();
-		matchedItems.clear();
-
-		if (detNum > trkNum) //	there are unmatched detections
-		{
-			for (unsigned int n = 0; n < detNum; n++)
-				allItems.insert(n);
-
-			for (unsigned int i = 0; i < trkNum; ++i)
-				matchedItems.insert(assignment[i]);
-
-			set_difference(allItems.begin(), allItems.end(),
-				matchedItems.begin(), matchedItems.end(),
-				insert_iterator<set<int>>(unmatchedDetections, unmatchedDetections.begin()));
-		}
-		else if (detNum < trkNum) // there are unmatched trajectory/predictions
-		{
-			for (unsigned int i = 0; i < trkNum; ++i)
-				if (assignment[i] == -1) // unassigned label will be set as -1 in the assignment algorithm
-					unmatchedTrajectories.insert(i);
-		}
-		else
-			;
-
-		// filter out matched with low IOU
-		matchedPairs.clear();
-		for (unsigned int i = 0; i < trkNum; ++i)
-		{
-			if (assignment[i] == -1) // pass over invalid values
-				continue;
-			if (1 - iouMatrix[i][assignment[i]] < iouThreshold)
-			{
-				unmatchedTrajectories.insert(i);
-				unmatchedDetections.insert(assignment[i]);
-			}
-			else
-				matchedPairs.push_back(cv::Point(i, assignment[i]));
-		}
-
-		///////////////////////////////////////
-		// 3.3. updating trackers
-
-		// update matched trackers with assigned detections.
-		// each prediction is corresponding to a tracker
-		int detIdx, trkIdx;
-		for (unsigned int i = 0; i < matchedPairs.size(); i++)
-		{
-			trkIdx = matchedPairs[i].x;
-			detIdx = matchedPairs[i].y;
-			trackers[trkIdx].update(detFrameData[fi][detIdx].box);
-		}
-
-		// create and initialise new trackers for unmatched detections
-		for (auto umd : unmatchedDetections)
-		{
-			KalmanTracker tracker = KalmanTracker(detFrameData[fi][umd].box);
-			trackers.push_back(tracker);
-		}
-
-		// get trackers' output
-		frameTrackingResult.clear();
-		for (auto it = trackers.begin(); it != trackers.end();)
-		{
-			if (((*it).m_time_since_update < 1) &&
-				((*it).m_hit_streak >= min_hits || frame_count <= min_hits))
-			{
-				TrackingBox res;
-				res.box = (*it).get_state();
-				res.id = (*it).m_id + 1;
-				res.frame = frame_count;
-				frameTrackingResult.push_back(res);
-				it++;
-			}
-			else
-				it++;
-
-			// remove dead tracklet
-			if (it != trackers.end() && (*it).m_time_since_update > max_age)
-				it = trackers.erase(it);
-		}
-
-		cycle_time = (double)(getTickCount() - start_time);
-		total_time += cycle_time / getTickFrequency();
-
-		for (auto tb : frameTrackingResult)
-			resultsFile << tb.frame << "," << tb.id << "," << tb.box.x << "," << tb.box.y << "," << tb.box.width << "," << tb.box.height << ",1,-1,-1,-1" << endl;
-
-		if (display) // read image, draw results and show them
-		{
-			ostringstream oss;
-			oss << imgPath << setw(6) << setfill('0') << fi + 1;
-			Mat img = imread(oss.str() + ".jpg");
-			if (img.empty())
-				continue;
-			
-			for (auto tb : frameTrackingResult)
-				cv::rectangle(img, tb.box, randColor[tb.id % CNUM], 2, 8, 0);
-			imshow(seqName, img);
-			cvWaitKey(40);
-		}
-	}
-
-	resultsFile.close();
-
-	if (display)
-		destroyAllWindows();
+    if (union_area < DBL_EPSILON)
+        return 0;
+    return (double)(intersection_area / union_area);
 }
+
+
+static void AssociateDetectionsToTrackers(const std::vector<DetectionBox> &dets, const std::vector<TrackingBox> &trks, float iou_threshold,
+        std::vector<std::vector<int>> &matches, std::vector<int> &unmatched_detections, std::vector<int> &unmatched_trackers)
+{
+    int det_num = dets.size();
+    int trk_num = trks.size();
+
+    if(trk_num==0)
+    {
+        for(int i=0; i<det_num; i++)
+            unmatched_detections.push_back(i);
+        return;
+    }
+
+    std::vector<std::vector<double>> iou_matrix;
+    iou_matrix .resize(det_num, vector<double>(trk_num, 0));
+
+    for(int i=0; i<det_num; i++)
+        for(int j=0; j<trk_num; j++)
+            // use 1-iou because the hungarian algorithm computes a minimum-cost assignment.
+            iou_matrix[i][j] = 1 - compute_iou(dets[i].box, trks[j].box);
+
+    // solve the assignment problem using hungarian algorithm.
+    HungarianAlgorithm hungalgo;
+    std::vector<int> assignment;
+
+    // the resulting assignment is [detection : tracker], with len=preNum
+    hungalgo.Solve(iou_matrix, assignment);
+
+    for(int i=0; i<det_num; i++)
+    {
+        int j = assignment[i];
+        // unassigned label will be set as -1 in the assignment algorithm
+        if((j != -1) && (1-iou_matrix[i][j] >= iou_threshold))
+        {
+            std::vector<int> match = {i, j};
+            matches.push_back(match);
+        }
+        else
+            unmatched_detections.push_back(i);
+    }
+
+    for(int i=0; i<trk_num; i++)
+        for(int j=0; j<matches.size(); j++)
+            if(i != matches[j][1]) unmatched_trackers.push_back(i);
+}
+
+
+std::vector<TrackingBox> Sort::Update(const std::vector<DetectionBox> &dets)
+{
+    m_frame_count += 1;
+    std::vector<TrackingBox> trks;
+
+    for(auto it = m_trackers.begin(); it != m_trackers.end();)
+    {
+        TrackingBox trk;
+        trk.box = it->Predict();
+
+        if(trk.box.x >= 0 && trk.box.y >=0)
+        {
+            trks.push_back(trk);
+            it++;
+        }
+        else
+        {
+            it = m_trackers.erase(it);
+        }
+    }
+
+    std::vector<std::vector<int>> matches;
+    std::vector<int> unmatched_detections, unmatched_trackers;
+
+    AssociateDetectionsToTrackers(dets, trks, m_iou_threshold, matches, unmatched_detections, unmatched_trackers);
+
+    // update matched trackers with assigned detections.
+    for(auto &m : matches)
+    {
+        m_trackers[m[1]].Update(dets[m[0]].box);
+        m_trackers[m[1]].m_det_name = std::string(dets[m[0]].det_name);
+    }
+        
+
+    // create and initialise new trackers for unmatched detections
+    for(auto &d : unmatched_detections)
+    {
+        KalmanTracker tracker = KalmanTracker(dets[d].box);
+        tracker.m_det_name = std::string(dets[d].det_name);
+        m_trackers.push_back(tracker);
+    }
+
+    trks.clear();
+    // get trackers' output
+    for(auto it = m_trackers.begin(); it != m_trackers.end(); it++)
+    {
+        if(((*it).m_time_since_update < 1) && ((*it).m_hit_streak >= m_min_hits || m_frame_count <= m_min_hits))
+        {
+            TrackingBox trk;
+            trk.box = it->GetState();
+            trk.id = it->m_id + 1;
+            trk.det_name = it->m_det_name;
+            trks.push_back(trk);
+        }
+
+        // remove dead tracklet
+        if((*it).m_time_since_update > m_max_age)
+        {
+            it = m_trackers.erase(it);
+            it--;
+        }
+    }
+    return trks;
+}
+
+

@@ -1,22 +1,29 @@
-///////////////////////////////////////////////////////////////////////////////
-// KalmanTracker.cpp: KalmanTracker Class Implementation Declaration
+/*================================================================
+*   Copyright (C) 2021 * Ltd. All rights reserved.
+*
+*   Editor      : VIM
+*   File name   : KalmanTracker.cc
+*   Author      : YunYang1994
+*   Created date: 2021-07-25 11:12:08
+*   Description :
+*
+*===============================================================*/
 
 #include "KalmanTracker.h"
 
 
 int KalmanTracker::kf_count = 0;
 
-
 // initialize Kalman filter
-void KalmanTracker::init_kf(StateType stateMat)
+void KalmanTracker::InitKf(StateType state_mat)
 {
-	int stateNum = 7;
-	int measureNum = 4;
-	kf = KalmanFilter(stateNum, measureNum, 0);
+	int state_num = 7;
+	int measure_num = 4;
 
-	measurement = Mat::zeros(measureNum, 1, CV_32F);
+	kf = cv::KalmanFilter(state_num, measure_num, 0);
+	measurement = cv::Mat::zeros(measure_num, 1, CV_32F);
 
-	kf.transitionMatrix = *(Mat_<float>(stateNum, stateNum) <<
+	kf.transitionMatrix = (cv::Mat_<float>(state_num, state_num) <<
 		1, 0, 0, 0, 1, 0, 0,
 		0, 1, 0, 0, 0, 1, 0,
 		0, 0, 1, 0, 0, 0, 1,
@@ -26,38 +33,38 @@ void KalmanTracker::init_kf(StateType stateMat)
 		0, 0, 0, 0, 0, 0, 1);
 
 	setIdentity(kf.measurementMatrix);
-	setIdentity(kf.processNoiseCov, Scalar::all(1e-2));
-	setIdentity(kf.measurementNoiseCov, Scalar::all(1e-1));
-	setIdentity(kf.errorCovPost, Scalar::all(1));
-	
+	setIdentity(kf.processNoiseCov, cv::Scalar::all(1e-2));
+	setIdentity(kf.measurementNoiseCov, cv::Scalar::all(1e-1));
+	setIdentity(kf.errorCovPost, cv::Scalar::all(1));
+
 	// initialize state vector with bounding box in [cx,cy,s,r] style
-	kf.statePost.at<float>(0, 0) = stateMat.x + stateMat.width / 2;
-	kf.statePost.at<float>(1, 0) = stateMat.y + stateMat.height / 2;
-	kf.statePost.at<float>(2, 0) = stateMat.area();
-	kf.statePost.at<float>(3, 0) = stateMat.width / stateMat.height;
+	kf.statePost.at<float>(0, 0) = state_mat.x + state_mat.width / 2;
+	kf.statePost.at<float>(1, 0) = state_mat.y + state_mat.height / 2;
+	kf.statePost.at<float>(2, 0) = state_mat.area();
+	kf.statePost.at<float>(3, 0) = state_mat.width / state_mat.height;
 }
 
 
 // Predict the estimated bounding box.
-StateType KalmanTracker::predict()
+StateType KalmanTracker::Predict()
 {
 	// predict
-	Mat p = kf.predict();
+    cv::Mat p = kf.predict();
 	m_age += 1;
 
 	if (m_time_since_update > 0)
 		m_hit_streak = 0;
 	m_time_since_update += 1;
 
-	StateType predictBox = get_rect_xysr(p.at<float>(0, 0), p.at<float>(1, 0), p.at<float>(2, 0), p.at<float>(3, 0));
+	StateType predict_box = convert_x_to_bbox(p.at<float>(0, 0), p.at<float>(1, 0), p.at<float>(2, 0), p.at<float>(3, 0));
 
-	m_history.push_back(predictBox);
+	m_history.push_back(predict_box);
 	return m_history.back();
 }
 
 
 // Update the state vector with observed bounding box.
-void KalmanTracker::update(StateType stateMat)
+void KalmanTracker::Update(StateType state_mat)
 {
 	m_time_since_update = 0;
 	m_history.clear();
@@ -65,10 +72,10 @@ void KalmanTracker::update(StateType stateMat)
 	m_hit_streak += 1;
 
 	// measurement
-	measurement.at<float>(0, 0) = stateMat.x + stateMat.width / 2;
-	measurement.at<float>(1, 0) = stateMat.y + stateMat.height / 2;
-	measurement.at<float>(2, 0) = stateMat.area();
-	measurement.at<float>(3, 0) = stateMat.width / stateMat.height;
+	measurement.at<float>(0, 0) = state_mat.x + state_mat.width / 2;
+	measurement.at<float>(1, 0) = state_mat.y + state_mat.height / 2;
+	measurement.at<float>(2, 0) = state_mat.area();
+	measurement.at<float>(3, 0) = state_mat.width / state_mat.height;
 
 	// update
 	kf.correct(measurement);
@@ -76,15 +83,15 @@ void KalmanTracker::update(StateType stateMat)
 
 
 // Return the current state vector
-StateType KalmanTracker::get_state()
+StateType KalmanTracker::GetState()
 {
-	Mat s = kf.statePost;
-	return get_rect_xysr(s.at<float>(0, 0), s.at<float>(1, 0), s.at<float>(2, 0), s.at<float>(3, 0));
+    cv::Mat s = kf.statePost;
+	return convert_x_to_bbox(s.at<float>(0, 0), s.at<float>(1, 0), s.at<float>(2, 0), s.at<float>(3, 0));
 }
 
 
 // Convert bounding box from [cx,cy,s,r] to [x,y,w,h] style.
-StateType KalmanTracker::get_rect_xysr(float cx, float cy, float s, float r)
+StateType KalmanTracker::convert_x_to_bbox(float cx, float cy, float s, float r)
 {
 	float w = sqrt(s * r);
 	float h = s / w;
@@ -100,84 +107,3 @@ StateType KalmanTracker::get_rect_xysr(float cx, float cy, float s, float r)
 }
 
 
-
-/*
-// --------------------------------------------------------------------
-// Kalman Filter Demonstrating, a 2-d ball demo
-// --------------------------------------------------------------------
-
-const int winHeight = 600;
-const int winWidth = 800;
-
-Point mousePosition = Point(winWidth >> 1, winHeight >> 1);
-
-// mouse event callback
-void mouseEvent(int event, int x, int y, int flags, void *param)
-{
-	if (event == CV_EVENT_MOUSEMOVE) {
-		mousePosition = Point(x, y);
-	}
-}
-
-void TestKF();
-
-void main()
-{
-	TestKF();
-}
-
-
-void TestKF()
-{
-	int stateNum = 4;
-	int measureNum = 2;
-	KalmanFilter kf = KalmanFilter(stateNum, measureNum, 0);
-
-	// initialization
-	Mat processNoise(stateNum, 1, CV_32F);
-	Mat measurement = Mat::zeros(measureNum, 1, CV_32F);
-
-	kf.transitionMatrix = *(Mat_<float>(stateNum, stateNum) <<
-		1, 0, 1, 0,
-		0, 1, 0, 1,
-		0, 0, 1, 0,
-		0, 0, 0, 1);
-
-	setIdentity(kf.measurementMatrix);
-	setIdentity(kf.processNoiseCov, Scalar::all(1e-2));
-	setIdentity(kf.measurementNoiseCov, Scalar::all(1e-1));
-	setIdentity(kf.errorCovPost, Scalar::all(1));
-
-	randn(kf.statePost, Scalar::all(0), Scalar::all(winHeight));
-
-	namedWindow("Kalman");
-	setMouseCallback("Kalman", mouseEvent);
-	Mat img(winHeight, winWidth, CV_8UC3);
-
-	while (1)
-	{
-		// predict
-		Mat prediction = kf.predict();
-		Point predictPt = Point(prediction.at<float>(0, 0), prediction.at<float>(1, 0));
-
-		// generate measurement
-		Point statePt = mousePosition;
-		measurement.at<float>(0, 0) = statePt.x;
-		measurement.at<float>(1, 0) = statePt.y;
-
-		// update
-		kf.correct(measurement);
-
-		// visualization
-		img.setTo(Scalar(255, 255, 255));
-		circle(img, predictPt, 8, CV_RGB(0, 255, 0), -1); // predicted point as green
-		circle(img, statePt, 8, CV_RGB(255, 0, 0), -1); // current position as red
-
-		imshow("Kalman", img);
-		char code = (char)waitKey(100);
-		if (code == 27 || code == 'q' || code == 'Q')
-			break;
-	}
-	destroyWindow("Kalman");
-}
-*/

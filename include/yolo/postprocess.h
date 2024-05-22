@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <vector>
 
+#include "opencv2/core/core.hpp"
+#include "opencv2/highgui/highgui.hpp"
+
 #define OBJ_NAME_MAX_SIZE 16
 #define OBJ_NUMB_MAX_SIZE 64
 #define OBJ_CLASS_NUM 80
@@ -26,9 +29,17 @@ typedef struct __detect_result_t
     float prop;
 } detect_result_t;
 
+// typedef struct _detect_result_group_t
+// {
+//     int cur_frame_id;
+//     int count;
+//     detect_result_t results[OBJ_NUMB_MAX_SIZE];
+// } detect_result_group_t;
+
 typedef struct _detect_result_group_t
 {
-    int frame_id;
+    cv::Mat cur_img;
+    int cur_frame_id;
     int count;
     detect_result_t results[OBJ_NUMB_MAX_SIZE];
 } detect_result_group_t;

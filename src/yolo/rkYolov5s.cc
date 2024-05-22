@@ -210,7 +210,7 @@ rknn_context *rkYolov5s::get_pctx()
 
 // cv::Mat rkYolov5s::infer(cv::Mat &orig_img)
 // std::vector<detect_result_t> rkYolov5s::infer(cv::Mat &orig_img)
-detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int frame_id)
+detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int cur_frame_id)
 {
     std::lock_guard<std::mutex> lock(mtx);
     cv::Mat img;
@@ -268,7 +268,7 @@ detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int frame_id)
 
     // 后处理/Post-processing
     detect_result_group_t detect_result_group;
-    detect_result_group.frame_id = frame_id;
+    
     std::vector<float> out_scales;
     std::vector<int32_t> out_zps;
     for (int i = 0; i < io_num.n_output; ++i)
@@ -279,23 +279,28 @@ detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int frame_id)
     post_process((int8_t *)outputs[0].buf, (int8_t *)outputs[1].buf, (int8_t *)outputs[2].buf, height, width,
                  box_conf_threshold, nms_threshold, pads, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
 
+    detect_result_group.cur_frame_id = cur_frame_id;
+    detect_result_group.cur_img = orig_img.clone();
+    // printf("frameid: %d\n", detect_result_group.cur_frame_id);
+    // printf("cur_img size: %d\n", detect_result_group.cur_img.size);
+
     // 绘制框体/Draw the box
-    char text[256];
-    for (int i = 0; i < detect_result_group.count; i++)
-    {
-        detect_result_t *det_result = &(detect_result_group.results[i]);
-        sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
-        // 打印预测物体的信息/Prints information about the predicted object
-        // printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
-        //        det_result->box.right, det_result->box.bottom, det_result->prop);
-        int x1 = det_result->box.left;
-        int y1 = det_result->box.top;
-        int x2 = det_result->box.right;
-        int y2 = det_result->box.bottom;
-        rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(256, 0, 0, 256), 3);
-        putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-    }
-    // std::string filename = "frame_" + std::to_string(frame_id) + ".jpg";
+    // char text[256];
+    // for (int i = 0; i < detect_result_group.count; i++)
+    // {
+    //     detect_result_t *det_result = &(detect_result_group.results[i]);
+    //     sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
+    //     // 打印预测物体的信息/Prints information about the predicted object
+    //     // printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
+    //     //        det_result->box.right, det_result->box.bottom, det_result->prop);
+    //     int x1 = det_result->box.left;
+    //     int y1 = det_result->box.top;
+    //     int x2 = det_result->box.right;
+    //     int y2 = det_result->box.bottom;
+    //     rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(256, 0, 0, 256), 3);
+    //     putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+    // }
+    // std::string filename = "frame_" + std::to_string(cur_frame_id) + ".jpg";
     // cv::imwrite(filename, orig_img);
 
     // std::vector<detect_result_t> results;

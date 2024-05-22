@@ -35,6 +35,9 @@ add_executable(rknn_yolov5sort_demo
         src/yolo/postprocess.cc
         src/yolo/preprocess.cc
         src/yolo/rkYolov5s.cc
+        src/sort/sort.cc
+        src/sort/KalmanTracker.cc
+        src/sort/Hungarian.cc
 )
 
 # 开启调试选项

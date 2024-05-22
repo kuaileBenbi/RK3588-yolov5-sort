@@ -1,17 +1,3 @@
-// Copyright (c) 2021 by Rockchip Electronics Co., Ltd. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "postprocess.h"
 
 #include <math.h>
@@ -23,7 +9,7 @@
 
 #include <set>
 #include <vector>
-#define LABEL_NALE_TXT_PATH "../model/coco_80_labels_list.txt"
+#define LABEL_NALE_TXT_PATH "/home/firefly/Desktop/tracker-app/yolosort/model/coco_80_labels_list.txt"
 
 static char *labels[OBJ_CLASS_NUM];
 
@@ -273,10 +259,10 @@ int post_process(int8_t *input0, int8_t *input1, int8_t *input2, int model_in_h,
 
     init = 0;
   }
-  int original_frame_id = group->frame_id;
+  // int original_cur_frame_id = group->cur_frame_id;
   memset(group, 0, sizeof(detect_result_group_t));
-  group->frame_id = original_frame_id;
-  // printf("original id: %d\n", original_frame_id);
+  // group->cur_frame_id = original_cur_frame_id;
+  // printf("original id: %d\n", original_cur_frame_id);
 
   std::vector<float> filterBoxes;
   std::vector<float> objProbs;
