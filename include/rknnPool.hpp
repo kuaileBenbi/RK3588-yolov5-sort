@@ -29,7 +29,7 @@ public:
     rknnPool(const std::string modelPath, int threadNum);
     int init();
     // 模型推理/Model inference
-    int put(inputType inputData);
+    int put(inputType inputData, int frame_id);
     // 获取推理结果/Get the results of your inference
     int get(outputType &outputData);
     ~rknnPool();
@@ -77,11 +77,19 @@ int rknnPool<rknnModel, inputType, outputType>::getModelId()
     return modelId;
 }
 
+// template <typename rknnModel, typename inputType, typename outputType>
+// int rknnPool<rknnModel, inputType, outputType>::put(inputType inputData)
+// {
+//     std::lock_guard<std::mutex> lock(queueMtx);
+//     futs.push(pool->submit(&rknnModel::infer, models[this->getModelId()], inputData));
+//     return 0;
+// }
+
 template <typename rknnModel, typename inputType, typename outputType>
-int rknnPool<rknnModel, inputType, outputType>::put(inputType inputData)
+int rknnPool<rknnModel, inputType, outputType>::put(inputType inputData, int frame_id)
 {
     std::lock_guard<std::mutex> lock(queueMtx);
-    futs.push(pool->submit(&rknnModel::infer, models[this->getModelId()], inputData));
+    futs.push(pool->submit(&rknnModel::infer, models[this->getModelId()], inputData, frame_id));
     return 0;
 }
 

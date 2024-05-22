@@ -2,7 +2,7 @@
 #include <mutex>
 #include "rknn_api.h"
 
-#include "postprocess.h"
+// #include "postprocess.h"
 #include "preprocess.h"
 
 #include "opencv2/core/core.hpp"
@@ -208,7 +208,9 @@ rknn_context *rkYolov5s::get_pctx()
     return &ctx;
 }
 
-cv::Mat rkYolov5s::infer(cv::Mat &orig_img)
+// cv::Mat rkYolov5s::infer(cv::Mat &orig_img)
+// std::vector<detect_result_t> rkYolov5s::infer(cv::Mat &orig_img)
+detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int frame_id)
 {
     std::lock_guard<std::mutex> lock(mtx);
     cv::Mat img;
@@ -266,6 +268,7 @@ cv::Mat rkYolov5s::infer(cv::Mat &orig_img)
 
     // 后处理/Post-processing
     detect_result_group_t detect_result_group;
+    detect_result_group.frame_id = frame_id;
     std::vector<float> out_scales;
     std::vector<int32_t> out_zps;
     for (int i = 0; i < io_num.n_output; ++i)
@@ -292,10 +295,25 @@ cv::Mat rkYolov5s::infer(cv::Mat &orig_img)
         rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(256, 0, 0, 256), 3);
         putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
     }
+    // std::string filename = "frame_" + std::to_string(frame_id) + ".jpg";
+    // cv::imwrite(filename, orig_img);
+
+    // std::vector<detect_result_t> results;
+    // for (int i = 0; i < detect_result_group.count; i++)
+    // {
+    //     detect_result_t *det_result = &(detect_result_group.results[i]);
+    //     results.push_back(*det_result);
+    //     // printf("rk---Detection %d: %s, Confidence: %.2f, Box: [%d, %d, %d, %d]\n",
+    //     //        i, det_result->name, det_result->prop * 100,
+    //     //        det_result->box.left, det_result->box.top,
+    //     //        det_result->box.right, det_result->box.bottom);
+    // }
 
     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
 
-    return orig_img;
+    // return orig_img;
+
+    return detect_result_group;
 }
 
 rkYolov5s::~rkYolov5s()

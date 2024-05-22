@@ -4,6 +4,7 @@
 #include "rknn_api.h"
 
 #include "opencv2/core/core.hpp"
+#include "postprocess.h"
 
 static void dump_tensor_attr(rknn_tensor_attr *attr);
 static unsigned char *load_data(FILE *fp, size_t ofst, size_t sz);
@@ -33,7 +34,9 @@ public:
     rkYolov5s(const std::string &model_path);
     int init(rknn_context *ctx_in, bool isChild);
     rknn_context *get_pctx();
-    cv::Mat infer(cv::Mat &ori_img);
+    // cv::Mat infer(cv::Mat &ori_img);
+    // std::vector<detect_result_t> infer(cv::Mat &ori_img);
+    detect_result_group_t infer(cv::Mat &ori_img, int frame_id);
     ~rkYolov5s();
 };
 

@@ -1,13 +1,6 @@
 #include "Hungarian.h"
 #include "KalmanTracker.h"
-
-using namespace std;
-using namespace cv;
-
-
-
-
-
+#include "sort.h"
 
 // Computes IOU between two bounding boxes
 double GetIOU(Rect_<float> bb_test, Rect_<float> bb_gt)

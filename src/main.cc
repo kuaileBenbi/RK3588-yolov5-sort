@@ -7,13 +7,14 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "rkYolov5s.hpp"
 #include "rknnPool.hpp"
+#include "postprocess.h"
 
 int main(int argc, char **argv)
 {
     if (argc < 4)
     {
         printf("Usage: %s <model path> <video_source> <save mode>\n", argv[0]);
-        printf("mode: 1 - display, 2 - save as images, 3 - save as video\n");
+        printf("mode: 1 - display, 2 - save as images, 3 - save as video, 4 - debug mode\n");
         return -1;
     }
     char *model_name = NULL;
@@ -23,7 +24,9 @@ int main(int argc, char **argv)
 
     // 初始化rknn线程池 /Initialize the rknn thread pool
     int threadNum = 3;
-    rknnPool<rkYolov5s, cv::Mat, cv::Mat> testPool(model_name, threadNum);
+    // rknnPool<rkYolov5s, cv::Mat, cv::Mat> testPool(model_name, threadNum);
+    // rknnPool<rkYolov5s, cv::Mat, std::vector<detect_result_t>> testPool(model_name, threadNum);
+    rknnPool<rkYolov5s, cv::Mat, detect_result_group_t> testPool(model_name, threadNum);
     if (testPool.init() != 0)
     {
         printf("rknnPool init fail!\n");
@@ -62,32 +65,50 @@ int main(int argc, char **argv)
             printf("read original images failed!\n");
             break;
         }
-            
-        if (testPool.put(img) != 0)
+
+        if (testPool.put(img, frames) != 0)
         {
             printf("put original images failed!\n");
             break;
         }
-        if (frames >= threadNum && testPool.get(img) != 0)
+        // if (frames >= threadNum && testPool.get(img) != 0)
+        // {
+        //     printf("frames > 3 but get processed images failed!\n");
+        //     break;
+        // }
+        detect_result_group_t results_group;
+        if (frames >= threadNum && testPool.get(results_group) != 0)
         {
             printf("frames > 3 but get processed images failed!\n");
             break;
         }
-            
-        if (mode == 1)
+
+        // if (mode == 1)
+        // {
+        //     cv::imshow("Camera FPS", img);
+        //     if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
+        //         break;
+        // }
+        // else if (mode == 2)
+        // {
+        //     std::string filename = "frame_" + std::to_string(frames) + ".jpg";
+        //     cv::imwrite(filename, img);
+        // }
+        // else if (mode == 3)
+        // {
+        //     save_video.write(img);
+        // }
+        if (mode == 4)
         {
-            cv::imshow("Camera FPS", img);
-            if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
-                break;
-        }
-        else if (mode == 2)
-        {
-            std::string filename = "frame_" + std::to_string(frames) + ".jpg";
-            cv::imwrite(filename, img);
-        }
-        else if (mode == 3)
-        {
-            save_video.write(img);
+            // printf("frames: %d\n", frames);
+            printf("Frame ID: %d\n", results_group.frame_id);
+            for (int i = 0; i < results_group.count; i++)
+            {
+                printf("Detection %d: Class: %s, Confidence: %.2f, Box: [%d, %d, %d, %d]\n",
+                       i + 1, results_group.results[i].name, results_group.results[i].prop * 100,
+                       results_group.results[i].box.left, results_group.results[i].box.top,
+                       results_group.results[i].box.right, results_group.results[i].box.bottom);
+            }
         }
 
         frames++;
@@ -103,23 +124,36 @@ int main(int argc, char **argv)
     // 清空rknn线程池/Clear the thread pool
     while (true)
     {
-        cv::Mat img;
-        if (testPool.get(img) != 0)
+        // cv::Mat img;
+        detect_result_group_t results_group;
+        // if (testPool.get(img) != 0)
+        if (testPool.get(results_group) != 0)
             break;
-        if (mode == 1)
+        // if (mode == 1)
+        // {
+        //     cv::imshow("Camera FPS", img);
+        //     if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
+        //         break;
+        // }
+        // else if (mode == 2)
+        // {
+        //     std::string filename = "frame_" + std::to_string(frames) + ".jpg";
+        //     cv::imwrite(filename, img);
+        // }
+        // else if (mode == 3)
+        // {
+        //     save_video.write(img);
+        // }
+        if (mode == 4)
         {
-            cv::imshow("Camera FPS", img);
-            if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
-                break;
-        }
-        else if (mode == 2)
-        {
-            std::string filename = "frame_" + std::to_string(frames) + ".jpg";
-            cv::imwrite(filename, img);
-        }
-        else if (mode == 3)
-        {
-            save_video.write(img);
+            printf("Frame ID: %d\n", results_group.frame_id);
+            for (int i = 0; i < results_group.count; i++)
+            {
+                printf("Detection %d: Class: %s, Confidence: %.2f, Box: [%d, %d, %d, %d]\n",
+                       i + 1, results_group.results[i].name, results_group.results[i].prop * 100,
+                       results_group.results[i].box.left, results_group.results[i].box.top,
+                       results_group.results[i].box.right, results_group.results[i].box.bottom);
+            }
         }
         frames++;
     }
@@ -134,7 +168,6 @@ int main(int argc, char **argv)
     auto endTime = time.tv_sec * 1000 + time.tv_usec / 1000;
 
     printf("Average:\t %f fps/s\n", float(frames) / float(endTime - startTime) * 1000.0);
-
 
     return 0;
 }
