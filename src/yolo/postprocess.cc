@@ -9,82 +9,25 @@
 
 #include <set>
 #include <vector>
-#define LABEL_NALE_TXT_PATH "/home/firefly/Desktop/tracker-app/yolosort/model/coco_80_labels_list.txt"
+// #define LABEL_NALE_TXT_PATH "/home/firefly/Desktop/tracker-app/yolosort/model/coco_80_labels_list.txt"
 
-static char *labels[OBJ_CLASS_NUM];
+// static char *labels[OBJ_CLASS_NUM];
+
+static const char *labels[OBJ_CLASS_NUM] = {
+    "person", "bicycle", "car", "motorbike", "aeroplane", "bus", "train", "truck", "boat", "traffic light",
+    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle",
+    "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
+    "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "sofa", "pottedplant", "bed",
+    "diningtable", "toilet", "tvmonitor", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven",
+    "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"};
 
 const int anchor0[6] = {10, 13, 16, 30, 33, 23};
 const int anchor1[6] = {30, 61, 62, 45, 59, 119};
 const int anchor2[6] = {116, 90, 156, 198, 373, 326};
 
 inline static int clamp(float val, int min, int max) { return val > min ? (val < max ? val : max) : min; }
-
-char *readLine(FILE *fp, char *buffer, int *len)
-{
-  int ch;
-  int i = 0;
-  size_t buff_len = 0;
-
-  buffer = (char *)malloc(buff_len + 1);
-  if (!buffer)
-    return NULL; // Out of memory
-
-  while ((ch = fgetc(fp)) != '\n' && ch != EOF)
-  {
-    buff_len++;
-    void *tmp = realloc(buffer, buff_len + 1);
-    if (tmp == NULL)
-    {
-      free(buffer);
-      return NULL; // Out of memory
-    }
-    buffer = (char *)tmp;
-
-    buffer[i] = (char)ch;
-    i++;
-  }
-  buffer[i] = '\0';
-
-  *len = buff_len;
-
-  // Detect end
-  if (ch == EOF && (i == 0 || ferror(fp)))
-  {
-    free(buffer);
-    return NULL;
-  }
-  return buffer;
-}
-
-int readLines(const char *fileName, char *lines[], int max_line)
-{
-  FILE *file = fopen(fileName, "r");
-  char *s;
-  int i = 0;
-  int n = 0;
-
-  if (file == NULL)
-  {
-    printf("Open %s fail!\n", fileName);
-    return -1;
-  }
-
-  while ((s = readLine(file, s, &n)) != NULL)
-  {
-    lines[i++] = s;
-    if (i >= max_line)
-      break;
-  }
-  fclose(file);
-  return i;
-}
-
-int loadLabelName(const char *locationFilename, char *label[])
-{
-  printf("loadLabelName %s\n", locationFilename);
-  readLines(locationFilename, label, OBJ_CLASS_NUM);
-  return 0;
-}
 
 static float CalculateOverlap(float xmin0, float ymin0, float xmax0, float ymax0, float xmin1, float ymin1, float xmax1,
                               float ymax1)
@@ -243,24 +186,27 @@ static int process(int8_t *input, int *anchor, int grid_h, int grid_w, int heigh
   return validCount;
 }
 
+static void assign_detection(DetectResultsGroup *group, float _x1, float _y1, float _x2, float _y2, float model_in_w, float model_in_h, float scale_w, float scale_h, float obj_conf, int id, const char *labels[])
+{
+  DetectionBox new_box;
+  int x1 = (int)(clamp(_x1, 0, model_in_w) / scale_w);
+  int y1 = (int)(clamp(_y1, 0, model_in_h) / scale_h);
+  int x2 = (int)(clamp(_x2, 0, model_in_w) / scale_w);
+  int y2 = (int)(clamp(_y2, 0, model_in_h) / scale_h);
+  new_box.box = cv::Rect_<int>(x1, y1,
+                               x2 - x1,
+                               y2 - y1);
+  new_box.score = obj_conf;
+  new_box.det_name = labels[id];
+  group->dets.push_back(new_box);
+}
+
 int post_process(int8_t *input0, int8_t *input1, int8_t *input2, int model_in_h, int model_in_w, float conf_threshold,
                  float nms_threshold, BOX_RECT pads, float scale_w, float scale_h, std::vector<int32_t> &qnt_zps,
-                 std::vector<float> &qnt_scales, detect_result_group_t *group)
+                 std::vector<float> &qnt_scales, DetectResultsGroup *group)
 {
-  static int init = -1;
-  if (init == -1)
-  {
-    int ret = 0;
-    ret = loadLabelName(LABEL_NALE_TXT_PATH, labels);
-    if (ret < 0)
-    {
-      return -1;
-    }
-
-    init = 0;
-  }
   // int original_cur_frame_id = group->cur_frame_id;
-  memset(group, 0, sizeof(detect_result_group_t));
+  memset(group, 0, sizeof(DetectResultsGroup));
   // group->cur_frame_id = original_cur_frame_id;
   // printf("original id: %d\n", original_cur_frame_id);
 
@@ -314,12 +260,10 @@ int post_process(int8_t *input0, int8_t *input1, int8_t *input2, int model_in_h,
     nms(validCount, filterBoxes, classId, indexArray, c, nms_threshold);
   }
 
-  int last_count = 0;
-  group->count = 0;
   /* box valid detect target */
   for (int i = 0; i < validCount; ++i)
   {
-    if (indexArray[i] == -1 || last_count >= OBJ_NUMB_MAX_SIZE)
+    if (indexArray[i] == -1)
     {
       continue;
     }
@@ -332,32 +276,8 @@ int post_process(int8_t *input0, int8_t *input1, int8_t *input2, int model_in_h,
     int id = classId[n];
     float obj_conf = objProbs[i];
 
-    group->results[last_count].box.left = (int)(clamp(x1, 0, model_in_w) / scale_w);
-    group->results[last_count].box.top = (int)(clamp(y1, 0, model_in_h) / scale_h);
-    group->results[last_count].box.right = (int)(clamp(x2, 0, model_in_w) / scale_w);
-    group->results[last_count].box.bottom = (int)(clamp(y2, 0, model_in_h) / scale_h);
-    group->results[last_count].prop = obj_conf;
-    char *label = labels[id];
-    strncpy(group->results[last_count].name, label, OBJ_NAME_MAX_SIZE);
-
-    // printf("result %2d: (%4d, %4d, %4d, %4d), %s\n", i, group->results[last_count].box.left,
-    // group->results[last_count].box.top,
-    //        group->results[last_count].box.right, group->results[last_count].box.bottom, label);
-    last_count++;
+    assign_detection(group, x1, y1, x2, y2, model_in_w, model_in_h, scale_w, scale_h, obj_conf, id, labels);
   }
-  group->count = last_count;
 
   return 0;
-}
-
-void deinitPostProcess()
-{
-  for (int i = 0; i < OBJ_CLASS_NUM; i++)
-  {
-    if (labels[i] != nullptr)
-    {
-      free(labels[i]);
-      labels[i] = nullptr;
-    }
-  }
 }

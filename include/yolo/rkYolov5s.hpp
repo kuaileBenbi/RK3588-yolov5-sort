@@ -36,7 +36,7 @@ public:
     rknn_context *get_pctx();
     // cv::Mat infer(cv::Mat &ori_img);
     // std::vector<detect_result_t> infer(cv::Mat &ori_img);
-    detect_result_group_t infer(cv::Mat &ori_img, int cur_frame_id);
+    DetectResultsGroup infer(cv::Mat &ori_img, int cur_frame_id);
     ~rkYolov5s();
 };
 

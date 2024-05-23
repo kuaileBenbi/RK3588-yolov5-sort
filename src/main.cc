@@ -9,8 +9,6 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
-#include "postprocess.h"
-
 
 int main(int argc, char **argv)
 {
@@ -29,7 +27,7 @@ int main(int argc, char **argv)
     // 初始化rknn线程池 /Initialize the rknn thread pool
     int threadNum = 3;
 
-    rknnPool<rkYolov5s, cv::Mat, detect_result_group_t> detectPool(model_name, threadNum);
+    rknnPool<rkYolov5s, cv::Mat, DetectResultsGroup> detectPool(model_name, threadNum);
     if (detectPool.init() != 0)
     {
         printf("rknnPool init fail!\n");
@@ -75,43 +73,34 @@ int main(int argc, char **argv)
             break;
         }
 
-        detect_result_group_t results_group = {cv::Mat(), 0, 0, {}};
+        DetectResultsGroup results_group = {cv::Mat(), 0, 0, {}};
         if (frames >= threadNum && detectPool.get(results_group) != 0)
         {
             printf("frames > 3 but get processed images failed!\n");
             break;
         }
 
-        if (mode == 4)
+        cv::Mat current_tracking_img = results_group.cur_img;
+        auto trks = sess->Update(results_group.dets);
+        char text[256];
+        for (auto &trk : trks)
         {
-            // printf("frames: %d\n", frames);
-            printf("Frame ID: %d\n", results_group.cur_frame_id);
-
-            std::vector<DetectionBox> dets;
-            cv::Mat current_tracking_img;
-            for (int i = 0; i < results_group.count; i++)
+            // std::cout<< trk.det_name << std::endl;
+            sprintf(text, "%s", trk.det_name.c_str());
+            cv::rectangle(current_tracking_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
+            cv::putText(current_tracking_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+            std::string filename = "frame_" + std::to_string(results_group.cur_frame_id) + ".jpg";
+            if (mode == 4)
             {
-                DetectionBox detection;
-                detection.det_name = results_group.results[i].name; 
-                detection.score = results_group.results[i].prop;
-                detection.box = cv::Rect_<float>(results_group.results[i].box.left,
-                                                 results_group.results[i].box.top,
-                                                 results_group.results[i].box.right - results_group.results[i].box.left,
-                                                 results_group.results[i].box.bottom - results_group.results[i].box.top);
-                dets.push_back(detection);
-            }
-            current_tracking_img = results_group.cur_img;
-            auto trks = sess->Update(dets);
-            char text[256];
-            for (auto &trk : trks)
-            {   
-                // std::cout<< trk.det_name << std::endl;
-                sprintf(text, "%s", trk.det_name.c_str());
-                cv::rectangle(current_tracking_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
-                cv::putText(current_tracking_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-                std::string filename = "frame_" + std::to_string(results_group.cur_frame_id) + ".jpg";
                 cv::imwrite(filename, current_tracking_img);
             }
+            else if (mode == 1)
+            {
+                cv::imshow("test", current_tracking_img);
+                if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
+                    break;
+            }
+            
         }
 
         frames++;
@@ -127,37 +116,32 @@ int main(int argc, char **argv)
     // 清空rknn线程池/Clear the thread pool
     while (true)
     {
-        detect_result_group_t results_group;
+        DetectResultsGroup results_group;
         if (detectPool.get(results_group) != 0)
             break;
-        
-        if (mode == 4)
-        {
-            std::vector<DetectionBox> dets;
-            cv::Mat current_tracking_img;
-            for (int i = 0; i < results_group.count; i++)
-            {
-                DetectionBox detection;
-                detection.det_name = results_group.results[i].name;
-                detection.score = results_group.results[i].prop;
-                detection.box = cv::Rect_<float>(results_group.results[i].box.left,
-                                                 results_group.results[i].box.top,
-                                                 results_group.results[i].box.right - results_group.results[i].box.left,
-                                                 results_group.results[i].box.bottom - results_group.results[i].box.top);
-                dets.push_back(detection);
-            }
 
-            current_tracking_img = results_group.cur_img;
-            auto trks = sess->Update(dets);
-            char text[256];
-            for (auto &trk : trks)
+        cv::Mat current_tracking_img = results_group.cur_img;
+        auto trks = sess->Update(results_group.dets);
+        char text[256];
+        for (auto &trk : trks)
+        {
+            // std::cout<< trk.det_name << std::endl;
+            sprintf(text, "%s", trk.det_name.c_str());
+            cv::rectangle(current_tracking_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
+            cv::putText(current_tracking_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+            std::string filename = "frame_" + std::to_string(results_group.cur_frame_id) + ".jpg";
+            if (mode == 4)
             {
-                sprintf(text, "%s", trk.det_name.c_str());
-                cv::rectangle(current_tracking_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
-                cv::putText(current_tracking_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-                std::string filename = "frame_" + std::to_string(results_group.cur_frame_id) + ".jpg";
                 cv::imwrite(filename, current_tracking_img);
             }
+            else if (mode == 1)
+            {
+                cv::imshow("test", current_tracking_img);
+                if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
+                    break;
+            }
+            
+            
         }
         frames++;
     }

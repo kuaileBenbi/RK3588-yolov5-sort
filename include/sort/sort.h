@@ -1,30 +1,6 @@
-/*================================================================
-*   Copyright (C) 2021 * Ltd. All rights reserved.
-*
-*   Editor      : VIM
-*   File name   : sort.h
-*   Author      : YunYang1994
-*   Created date: 2021-08-10 14:59:53
-*   Description :
-*
-*===============================================================*/
-
 #pragma once
 #include <opencv2/core.hpp>
-
-typedef struct DetectionBox
-{
-    float score;
-    std::string det_name;
-    cv::Rect_<float> box;
-}DetectionBox;
-
-typedef struct TrackingBox
-{
-    int id;
-    std::string det_name;
-    cv::Rect_<float> box;
-}TrackingBox;
+#include "common.h"
 
 
 class TrackingSession {

@@ -4,6 +4,7 @@
 
 // #include "postprocess.h"
 #include "preprocess.h"
+#include "common.h"
 
 #include "opencv2/core/core.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -80,18 +81,6 @@ static unsigned char *load_model(const char *filename, int *model_size)
     return data;
 }
 
-static int saveFloat(const char *file_name, float *output, int element_size)
-{
-    FILE *fp;
-    fp = fopen(file_name, "w");
-    for (int i = 0; i < element_size; i++)
-    {
-        fprintf(fp, "%.6f\n", output[i]);
-    }
-    fclose(fp);
-    return 0;
-}
-
 rkYolov5s::rkYolov5s(const std::string &model_path)
 {
     this->model_path = model_path;
@@ -152,7 +141,7 @@ int rkYolov5s::init(rknn_context *ctx_in, bool share_weight)
         printf("rknn_init error ret=%d\n", ret);
         return -1;
     }
-    printf("model input num: %d, output num: %d\n", io_num.n_input, io_num.n_output);
+    // printf("model input num: %d, output num: %d\n", io_num.n_input, io_num.n_output);
 
     // 设置输入参数/Set the input parameters
     input_attrs = (rknn_tensor_attr *)calloc(io_num.n_input, sizeof(rknn_tensor_attr));
@@ -179,19 +168,19 @@ int rkYolov5s::init(rknn_context *ctx_in, bool share_weight)
 
     if (input_attrs[0].fmt == RKNN_TENSOR_NCHW)
     {
-        printf("model is NCHW input fmt\n");
+        // printf("model is NCHW input fmt\n");
         channel = input_attrs[0].dims[1];
         height = input_attrs[0].dims[2];
         width = input_attrs[0].dims[3];
     }
     else
     {
-        printf("model is NHWC input fmt\n");
+        // printf("model is NHWC input fmt\n");
         height = input_attrs[0].dims[1];
         width = input_attrs[0].dims[2];
         channel = input_attrs[0].dims[3];
     }
-    printf("model input height=%d, width=%d, channel=%d\n", height, width, channel);
+    // printf("model input height=%d, width=%d, channel=%d\n", height, width, channel);
 
     memset(inputs, 0, sizeof(inputs));
     inputs[0].index = 0;
@@ -208,9 +197,7 @@ rknn_context *rkYolov5s::get_pctx()
     return &ctx;
 }
 
-// cv::Mat rkYolov5s::infer(cv::Mat &orig_img)
-// std::vector<detect_result_t> rkYolov5s::infer(cv::Mat &orig_img)
-detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int cur_frame_id)
+DetectResultsGroup rkYolov5s::infer(cv::Mat &orig_img, int cur_frame_id)
 {
     std::lock_guard<std::mutex> lock(mtx);
     cv::Mat img;
@@ -267,7 +254,7 @@ detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int cur_frame_id)
     ret = rknn_outputs_get(ctx, io_num.n_output, outputs, NULL);
 
     // 后处理/Post-processing
-    detect_result_group_t detect_result_group;
+    DetectResultsGroup detect_result_group;
     
     std::vector<float> out_scales;
     std::vector<int32_t> out_zps;
@@ -281,38 +268,6 @@ detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int cur_frame_id)
 
     detect_result_group.cur_frame_id = cur_frame_id;
     detect_result_group.cur_img = orig_img.clone();
-    // printf("frameid: %d\n", detect_result_group.cur_frame_id);
-    // printf("cur_img size: %d\n", detect_result_group.cur_img.size);
-
-    // 绘制框体/Draw the box
-    // char text[256];
-    // for (int i = 0; i < detect_result_group.count; i++)
-    // {
-    //     detect_result_t *det_result = &(detect_result_group.results[i]);
-    //     sprintf(text, "%s %.1f%%", det_result->name, det_result->prop * 100);
-    //     // 打印预测物体的信息/Prints information about the predicted object
-    //     // printf("%s @ (%d %d %d %d) %f\n", det_result->name, det_result->box.left, det_result->box.top,
-    //     //        det_result->box.right, det_result->box.bottom, det_result->prop);
-    //     int x1 = det_result->box.left;
-    //     int y1 = det_result->box.top;
-    //     int x2 = det_result->box.right;
-    //     int y2 = det_result->box.bottom;
-    //     rectangle(orig_img, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(256, 0, 0, 256), 3);
-    //     putText(orig_img, text, cv::Point(x1, y1 + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-    // }
-    // std::string filename = "frame_" + std::to_string(cur_frame_id) + ".jpg";
-    // cv::imwrite(filename, orig_img);
-
-    // std::vector<detect_result_t> results;
-    // for (int i = 0; i < detect_result_group.count; i++)
-    // {
-    //     detect_result_t *det_result = &(detect_result_group.results[i]);
-    //     results.push_back(*det_result);
-    //     // printf("rk---Detection %d: %s, Confidence: %.2f, Box: [%d, %d, %d, %d]\n",
-    //     //        i, det_result->name, det_result->prop * 100,
-    //     //        det_result->box.left, det_result->box.top,
-    //     //        det_result->box.right, det_result->box.bottom);
-    // }
 
     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
 
@@ -323,8 +278,6 @@ detect_result_group_t rkYolov5s::infer(cv::Mat &orig_img, int cur_frame_id)
 
 rkYolov5s::~rkYolov5s()
 {
-    deinitPostProcess();
-
     ret = rknn_destroy(ctx);
 
     if (model_data)
