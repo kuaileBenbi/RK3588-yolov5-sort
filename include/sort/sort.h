@@ -2,7 +2,6 @@
 #include <opencv2/core.hpp>
 #include "common.h"
 
-
 class TrackingSession {
     public:
         virtual ~TrackingSession() {};

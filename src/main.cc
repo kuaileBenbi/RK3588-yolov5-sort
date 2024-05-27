@@ -2,13 +2,16 @@
 #include <memory>
 #include <sys/time.h>
 
+#include <iomanip>
+#include <sstream>
+
 #include "rkYolov5s.hpp"
 #include "rknnPool.hpp"
-#include "sort.h"
+// #include "sort.h"
 
-#include "opencv2/core/core.hpp"
-#include "opencv2/highgui/highgui.hpp"
-#include "opencv2/imgproc/imgproc.hpp"
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 int main(int argc, char **argv)
 {
@@ -25,7 +28,7 @@ int main(int argc, char **argv)
     int mode = std::atoi(argv[3]);
 
     // 初始化rknn线程池 /Initialize the rknn thread pool
-    int threadNum = 3;
+    int threadNum = 1;
 
     rknnPool<rkYolov5s, cv::Mat, DetectResultsGroup> detectPool(model_name, threadNum);
     if (detectPool.init() != 0)
@@ -34,7 +37,12 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    TrackingSession *sess = CreateSession(2, 3, 0.3);
+    // TrackingSession *sess = CreateSession(10, 3, 0.3);
+    // if (sess == nullptr)
+    // {
+    //     printf("CreateSession failed!\n");
+    //     return -1;
+    // }
 
     cv::VideoCapture capture;
     capture.open(vedio_name);
@@ -57,10 +65,11 @@ int main(int argc, char **argv)
 
     int frames = 0;
     auto beforeTime = startTime;
+    cv::Mat img;
+    DetectResultsGroup results_group;
 
     while (capture.isOpened())
     {
-        cv::Mat img;
         if (capture.read(img) == false)
         {
             printf("read original images failed!\n");
@@ -73,37 +82,87 @@ int main(int argc, char **argv)
             break;
         }
 
-        DetectResultsGroup results_group = {cv::Mat(), 0, 0, {}};
         if (frames >= threadNum && detectPool.get(results_group) != 0)
         {
             printf("frames > 3 but get processed images failed!\n");
             break;
         }
-
-        cv::Mat current_tracking_img = results_group.cur_img;
-        auto trks = sess->Update(results_group.dets);
-        char text[256];
-        for (auto &trk : trks)
+        if (mode == 2 && !results_group.cur_img.empty())
         {
-            // std::cout<< trk.det_name << std::endl;
-            sprintf(text, "%s", trk.det_name.c_str());
-            cv::rectangle(current_tracking_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
-            cv::putText(current_tracking_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-            std::string filename = "frame_" + std::to_string(results_group.cur_frame_id) + ".jpg";
-            if (mode == 4)
+            std::ostringstream oss;
+            oss << "detect_" << std::setfill('0') << std::setw(4) << results_group.cur_frame_id << ".jpg";
+            std::string filename = oss.str();
+            char text[256];
+            for (auto &det : results_group.dets)
             {
-                cv::imwrite(filename, current_tracking_img);
+                // std::cout << "cur_frame_id: " << detect_result_group.cur_frame_id << " " << draw_times << std::endl;
+                sprintf(text, "%s %.1f%%", det.det_name.c_str(), det.score * 100);
+                // cv::rectangle(new_img, det.box, cv::Scalar(256, 0, 0, 256), 3);
+                // cv::putText(new_img, text, cv::Point(det.box.x, det.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255),1.5);
+                // draw_times ++ ;
+                // cv::rectangle(results_group.cur_img, det.box, cv::Scalar(256, 0, 0, 256), 3);
+                // cv::putText(results_group.cur_img, text, cv::Point(det.box.x, det.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+                rectangle(results_group.cur_img, cv::Point(det.box.left, det.box.top), cv::Point(det.box.right, det.box.bottom), cv::Scalar(256, 0, 0, 256), 3);
+                putText(results_group.cur_img, text, cv::Point(det.box.left, det.box.top + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
             }
-            else if (mode == 1)
-            {
-                cv::imshow("test", current_tracking_img);
-                if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
-                    break;
-            }
-            
+            cv::imwrite(filename, results_group.cur_img);
+            // cv::imshow("test", results_group.cur_img);
+            // if (cv::waitKey(1) == 'q')
+            //     break;
         }
+        // if (mode == 3 && !results_group.cur_img.empty())
+        // {
+        //     auto trks = sess->Update(results_group.dets);
+        //     char text[256];
+        //     for (auto &trk : trks)
+        //     {
+        //         sprintf(text, "%s", trk.det_name.c_str());
+        //         cv::rectangle(results_group.cur_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
+        //         cv::putText(results_group.cur_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+        //         std::ostringstream oss;
+        //         oss << "track_" << std::setfill('0') << std::setw(4) << results_group.cur_frame_id << ".jpg";
+        //         std::string filename = oss.str();
+        //         cv::imwrite(filename, results_group.cur_img);
+        //     }
+        // }
+
+        // auto trks = sess->Update(results_group.dets);
+        // char text[256];
+        // for (auto &trk : trks)
+        // {
+        //     sprintf(text, "%s", trk.det_name.c_str());
+        //     // cv::rectangle(results_group.cur_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
+        //     // cv::putText(results_group.cur_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+
+        //     if (mode == 4)
+        //     {
+        //         // std::string filename = "track_" + std::to_string(results_group.cur_frame_id) + ".jpg";
+        //         std::ostringstream oss;
+        //         oss << "track_" << std::setfill('0') << std::setw(4) << results_group.cur_frame_id << ".jpg";
+        //         std::string filename = oss.str();
+        //         cv::imwrite(filename, results_group.cur_img);
+        //     }
+        //     else if (mode == 1)
+        //     {
+        //         // 定义缩小后的尺寸 (例如：原始尺寸的一半)
+        //         cv::Size new_size(results_group.cur_img.cols / 2, results_group.cur_img.rows / 2);
+        //         // 创建用于保存缩小图像的Mat对象
+        //         cv::Mat save_resized_img;
+        //         // 缩小图像
+        //         cv::resize(results_group.cur_img, save_resized_img, new_size);
+        //         cv::imshow("test", save_resized_img);
+        //         if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
+        //             return 0;
+        //     }
+        // }
+        // }
 
         frames++;
+
+        // if (frames == 10)
+        // {
+        //     break;
+        // }
 
         if (frames % 100 == 0)
         {
@@ -116,37 +175,79 @@ int main(int argc, char **argv)
     // 清空rknn线程池/Clear the thread pool
     while (true)
     {
-        DetectResultsGroup results_group;
         if (detectPool.get(results_group) != 0)
             break;
 
-        cv::Mat current_tracking_img = results_group.cur_img;
-        auto trks = sess->Update(results_group.dets);
-        char text[256];
-        for (auto &trk : trks)
+        if (mode == 2 && !results_group.cur_img.empty())
         {
-            // std::cout<< trk.det_name << std::endl;
-            sprintf(text, "%s", trk.det_name.c_str());
-            cv::rectangle(current_tracking_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
-            cv::putText(current_tracking_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
-            std::string filename = "frame_" + std::to_string(results_group.cur_frame_id) + ".jpg";
-            if (mode == 4)
-            {
-                cv::imwrite(filename, current_tracking_img);
-            }
-            else if (mode == 1)
-            {
-                cv::imshow("test", current_tracking_img);
-                if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
-                    break;
-            }
-            
-            
+            std::ostringstream oss;
+            oss << "detect_" << std::setfill('0') << std::setw(4) << results_group.cur_frame_id << ".jpg";
+            std::string filename = oss.str();
+            cv::imwrite(filename, results_group.cur_img);
         }
+
+        // if (mode == 3 && !results_group.cur_img.empty())
+        // {
+        //     auto trks = sess->Update(results_group.dets);
+        //     char text[256];
+        //     for (auto &trk : trks)
+        //     {
+        //         sprintf(text, "%s", trk.det_name.c_str());
+        //         cv::rectangle(results_group.cur_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
+        //         cv::putText(results_group.cur_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+        //         std::ostringstream oss;
+        //         oss << "track_" << std::setfill('0') << std::setw(4) << results_group.cur_frame_id << ".jpg";
+        //         std::string filename = oss.str();
+        //         cv::imwrite(filename, results_group.cur_img);
+        //     }
+        // }
+
+        // if (!results_group.dets.empty())
+        // {
+        //     if (mode == 2)
+        //     {
+        //         std::ostringstream oss;
+        //         oss << "detect_" << std::setfill('0') << std::setw(4) << results_group.cur_frame_id << ".jpg";
+        //         std::string filename = oss.str();
+        //         cv::imwrite(filename, results_group.cur_img);
+        //     }
+
+        // auto trks = sess->Update(results_group.dets);
+        // char text[256];
+        // for (auto &trk : trks)
+        // {
+        //     // std::cout<< trk.det_name << std::endl;
+        //     sprintf(text, "%s", trk.det_name.c_str());
+        //     // cv::rectangle(results_group.cur_img, trk.box, randColor[trk.id % cnum], 2, 8, 0);
+        //     // cv::putText(results_group.cur_img, text, cv::Point(trk.box.x, trk.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+
+        //     if (mode == 4)
+        //     {
+        //         // std::string filename = "track_" + std::to_string(results_group.cur_frame_id) + ".jpg";
+        //         std::ostringstream oss;
+        //         oss << "track_" << std::setfill('0') << std::setw(4) << results_group.cur_frame_id << ".jpg";
+        //         std::string filename = oss.str();
+        //         cv::imwrite(filename, results_group.cur_img);
+        //     }
+        //     else if (mode == 1)
+        //     {
+        //         // 定义缩小后的尺寸 (例如：原始尺寸的一半)
+        //         cv::Size new_size(results_group.cur_img.cols / 2, results_group.cur_img.rows / 2);
+        //         // 创建用于保存缩小图像的Mat对象
+        //         cv::Mat save_resized_img;
+        //         // 缩小图像
+        //         cv::resize(results_group.cur_img, save_resized_img, new_size);
+        //         cv::imshow("test", save_resized_img);
+        //         if (cv::waitKey(1) == 'q') // 延时1毫秒,按q键退出/Press q to exit
+        //             return 0;
+        //     }
+        // }
+        // }
+
         frames++;
     }
 
-    ReleaseSession(&sess);
+    // ReleaseSession(&sess);
     capture.release();
 
     gettimeofday(&time, nullptr);

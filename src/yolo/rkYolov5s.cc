@@ -1,5 +1,10 @@
 #include <stdio.h>
+#include <iomanip> 
+#include <sstream>
 #include <mutex>
+
+#include <iostream>
+
 #include "rknn_api.h"
 
 // #include "postprocess.h"
@@ -226,13 +231,13 @@ DetectResultsGroup rkYolov5s::infer(cv::Mat &orig_img, int cur_frame_id)
         {
             fprintf(stderr, "resize with rga error\n");
         }
-        /*********
-        // opencv
-        float min_scale = std::min(scale_w, scale_h);
-        scale_w = min_scale;
-        scale_h = min_scale;
-        letterbox(img, resized_img, pads, min_scale, target_size);
-        *********/
+
+        // // opencv
+        // float min_scale = std::min(scale_w, scale_h);
+        // scale_w = min_scale;
+        // scale_h = min_scale;
+        // letterbox(img, resized_img, pads, min_scale, target_size);
+
         inputs[0].buf = resized_img.data;
     }
     else
@@ -267,11 +272,40 @@ DetectResultsGroup rkYolov5s::infer(cv::Mat &orig_img, int cur_frame_id)
                  box_conf_threshold, nms_threshold, pads, scale_w, scale_h, out_zps, out_scales, &detect_result_group);
 
     detect_result_group.cur_frame_id = cur_frame_id;
+    // detect_result_group.cur_img = orig_img.clone();
+
+    // char text[256];
+    // // std::cout << "dets_size: " << detect_result_group.dets.size() << std::endl;
+    // // int draw_times = 1;
+    // // cv::Mat new_img = orig_img.clone();
+    // for (auto& det : detect_result_group.dets)
+    // {   
+    //     // std::cout << "cur_frame_id: " << detect_result_group.cur_frame_id << " " << draw_times << std::endl;
+    //     sprintf(text, "%s %.1f%%", det.det_name.c_str(), det.score * 100);
+    //     // cv::rectangle(new_img, det.box, cv::Scalar(256, 0, 0, 256), 3);
+    //     // cv::putText(new_img, text, cv::Point(det.box.x, det.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255),1.5);
+    //     // draw_times ++ ;
+    //     cv::rectangle(orig_img, det.box, cv::Scalar(256, 0, 0, 256), 3);
+    //     cv::putText(orig_img, text, cv::Point(det.box.x, det.box.y + 12), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255));
+    // }
+    // detect_result_group.cur_img = new_img.clone();
     detect_result_group.cur_img = orig_img.clone();
+    
+    // std::ostringstream oss;
+    // oss << "detect_2_" << std::setfill('0') << std::setw(4) << cur_frame_id << ".jpg";
+    // std::string filename = oss.str();
+
+    // // 定义缩小后的尺寸 (例如：原始尺寸的一半)
+    // cv::Size new_size(orig_img.cols / 2, orig_img.rows / 2);
+    // // 创建用于保存缩小图像的Mat对象
+    // cv::Mat save_resized_img;
+    // // 缩小图像
+    // cv::resize(orig_img, save_resized_img, new_size);
+    // // 保存缩小后的图像
+    // cv::imwrite(filename, orig_img);
+
 
     ret = rknn_outputs_release(ctx, io_num.n_output, outputs);
-
-    // return orig_img;
 
     return detect_result_group;
 }

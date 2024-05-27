@@ -1,14 +1,3 @@
-/*================================================================
-*   Copyright (C) 2021 * Ltd. All rights reserved.
-*
-*   Editor      : VIM
-*   File name   : Hungarian.h
-*   Author      : YunYang1994
-*   Created date: 2021-08-10 14:23:49
-*   Description :
-*
-*===============================================================*/
-
 #include <cfloat> // for DBL_MAX
 #include <cmath>  // for fabs()
 #include <iostream>

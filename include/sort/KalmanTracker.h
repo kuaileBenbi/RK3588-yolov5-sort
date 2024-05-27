@@ -1,14 +1,3 @@
-/*================================================================
-*   Copyright (C) 2021 * Ltd. All rights reserved.
-*
-*   Editor      : VIM
-*   File name   : KalmanTracker.h
-*   Author      : YunYang1994
-*   Created date: 2021-07-21 14:20:53
-*   Description :
-*
-*===============================================================*/
-
 #ifndef KALMAN_H
 #define KALMAN_H 2
 

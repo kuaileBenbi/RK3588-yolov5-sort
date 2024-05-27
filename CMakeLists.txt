@@ -5,6 +5,7 @@ project(rknn_yolov5sort_demo)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "-pthread")
+# set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
 
 # skip 3rd-party lib dependencies
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--allow-shlib-undefined")
@@ -27,7 +28,7 @@ include_directories( ${CMAKE_SOURCE_DIR}/include)
 include_directories( ${CMAKE_SOURCE_DIR}/include/rga)
 include_directories( ${CMAKE_SOURCE_DIR}/include/rknn_api)
 include_directories( ${CMAKE_SOURCE_DIR}/include/yolo)
-include_directories( ${CMAKE_SOURCE_DIR}/include/sort)
+# include_directories( ${CMAKE_SOURCE_DIR}/include/sort)
 
 
 add_executable(rknn_yolov5sort_demo
@@ -35,13 +36,14 @@ add_executable(rknn_yolov5sort_demo
         src/yolo/postprocess.cc
         src/yolo/preprocess.cc
         src/yolo/rkYolov5s.cc
-        src/sort/sort.cc
-        src/sort/KalmanTracker.cc
-        src/sort/Hungarian.cc
+        # src/sort/sort.cc
+        # src/sort/KalmanTracker.cc
+        # src/sort/Hungarian.cc
 )
 
 # 开启调试选项
-add_definitions("-g")
+# add_definitions("-g -O4")
+add_definitions("-g -O0")
 
 target_link_libraries(rknn_yolov5sort_demo
   ${RKNN_RT_LIB}

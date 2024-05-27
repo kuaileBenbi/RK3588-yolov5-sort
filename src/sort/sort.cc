@@ -1,15 +1,3 @@
-/*================================================================
-*   Copyright (C) 2021 * Ltd. All rights reserved.
-*
-*   Editor      : VIM
-*   File name   : sort.cc
-*   Author      : YunYang1994
-*   Created date: 2021-08-11 20:31:32
-*   Description :
-*
-*===============================================================*/
-
-
 #include "sort.h"
 #include "Hungarian.h"
 #include "KalmanTracker.h"
@@ -82,7 +70,7 @@ static void AssociateDetectionsToTrackers(const std::vector<DetectionBox> &dets,
     }
 
     std::vector<std::vector<double>> iou_matrix;
-    iou_matrix .resize(det_num, vector<double>(trk_num, 0));
+    iou_matrix.resize(det_num, vector<double>(trk_num, 0));
 
     for(int i=0; i<det_num; i++)
         for(int j=0; j<trk_num; j++)

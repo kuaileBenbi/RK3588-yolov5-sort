@@ -1,16 +1,4 @@
-/*================================================================
-*   Copyright (C) 2021 * Ltd. All rights reserved.
-*
-*   Editor      : VIM
-*   File name   : Hungarian.cc
-*   Author      : YunYang1994
-*   Created date: 2021-08-10 14:24:32
-*   Description :
-*
-*===============================================================*/
-
 #include "Hungarian.h"
-
 
 HungarianAlgorithm::HungarianAlgorithm(){}
 HungarianAlgorithm::~HungarianAlgorithm(){}
@@ -22,6 +10,12 @@ HungarianAlgorithm::~HungarianAlgorithm(){}
 double HungarianAlgorithm::Solve(vector<vector<double>>& DistMatrix, vector<int>& Assignment)
 {
 	unsigned int nRows = DistMatrix.size();
+
+	if (nRows == 0) {
+		printf("WARN: nRows == 0 !\n");
+		return 10000;
+	}
+
 	unsigned int nCols = DistMatrix[0].size();
 
 	double *distMatrixIn = new double[nRows * nCols];

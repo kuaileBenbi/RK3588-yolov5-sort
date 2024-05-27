@@ -1,14 +1,3 @@
-/*================================================================
-*   Copyright (C) 2021 * Ltd. All rights reserved.
-*
-*   Editor      : VIM
-*   File name   : KalmanTracker.cc
-*   Author      : YunYang1994
-*   Created date: 2021-07-25 11:12:08
-*   Description :
-*
-*===============================================================*/
-
 #include "KalmanTracker.h"
 
 
