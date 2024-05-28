@@ -28,7 +28,7 @@ include_directories( ${CMAKE_SOURCE_DIR}/include)
 include_directories( ${CMAKE_SOURCE_DIR}/include/rga)
 include_directories( ${CMAKE_SOURCE_DIR}/include/rknn_api)
 include_directories( ${CMAKE_SOURCE_DIR}/include/yolo)
-# include_directories( ${CMAKE_SOURCE_DIR}/include/sort)
+include_directories( ${CMAKE_SOURCE_DIR}/include/sort)
 
 
 add_executable(rknn_yolov5sort_demo
@@ -36,9 +36,9 @@ add_executable(rknn_yolov5sort_demo
         src/yolo/postprocess.cc
         src/yolo/preprocess.cc
         src/yolo/rkYolov5s.cc
-        # src/sort/sort.cc
-        # src/sort/KalmanTracker.cc
-        # src/sort/Hungarian.cc
+        src/sort/sort.cc
+        src/sort/KalmanTracker.cc
+        src/sort/Hungarian.cc
 )
 
 # 开启调试选项

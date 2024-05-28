@@ -11,10 +11,10 @@ double HungarianAlgorithm::Solve(vector<vector<double>>& DistMatrix, vector<int>
 {
 	unsigned int nRows = DistMatrix.size();
 
-	if (nRows == 0) {
-		printf("WARN: nRows == 0 !\n");
-		return 10000;
-	}
+	// if (nRows == 0) {
+	// 	printf("WARN: nRows == 0 !\n");
+	// 	return 10000;
+	// }
 
 	unsigned int nCols = DistMatrix[0].size();
 

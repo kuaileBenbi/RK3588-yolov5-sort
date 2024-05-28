@@ -4,16 +4,14 @@
 
 #include <atomic>
 #include <vector>
-#include <cfloat> // for DBL_MAX
-#include <iomanip>    // to format image names using setw() and setfill()
-#include <unistd.h>   // to check file existence using POSIX function access(). On Linux include <unistd.h>.
+#include <cfloat>   // for DBL_MAX
+#include <iomanip>  // to format image names using setw() and setfill()
+#include <unistd.h> // to check file existence using POSIX function access(). On Linux include <unistd.h>.
 
-
-class Sort: public TrackingSession
+class Sort : public TrackingSession
 {
 public:
-    Sort(int max_age, int min_hits, float iou_threshold):
-        m_max_age(max_age), m_min_hits(min_hits), m_iou_threshold(iou_threshold)
+    Sort(int max_age, int min_hits, float iou_threshold) : m_max_age(max_age), m_min_hits(min_hits), m_iou_threshold(iou_threshold)
     {
         m_frame_count = 0;
         m_trackers = {};
@@ -32,18 +30,19 @@ private:
 
 std::atomic<int> Sort::ms_num_session(0);
 
-TrackingSession *CreateSession(int max_age, int min_hits, float iou_threshold) {
+TrackingSession *CreateSession(int max_age, int min_hits, float iou_threshold)
+{
     return new Sort(max_age, min_hits, iou_threshold);
 }
 
-
-void ReleaseSession(TrackingSession **session_ptr) {
-    if (session_ptr && *session_ptr) {
+void ReleaseSession(TrackingSession **session_ptr)
+{
+    if (session_ptr && *session_ptr)
+    {
         delete *session_ptr;
         session_ptr = nullptr;
     }
 }
-
 
 static double compute_iou(cv::Rect_<float> bb_test, cv::Rect_<float> bb_gt)
 {
@@ -55,25 +54,24 @@ static double compute_iou(cv::Rect_<float> bb_test, cv::Rect_<float> bb_gt)
     return (double)(intersection_area / union_area);
 }
 
-
 static void AssociateDetectionsToTrackers(const std::vector<DetectionBox> &dets, const std::vector<TrackingBox> &trks, float iou_threshold,
-        std::vector<std::vector<int>> &matches, std::vector<int> &unmatched_detections, std::vector<int> &unmatched_trackers)
+                                          std::vector<std::vector<int>> &matches, std::vector<int> &unmatched_detections, std::vector<int> &unmatched_trackers)
 {
     int det_num = dets.size();
     int trk_num = trks.size();
 
-    if(trk_num==0)
+    std::vector<std::vector<double>> iou_matrix;
+    iou_matrix.resize(det_num, vector<double>(trk_num, 0));
+
+    if (trk_num == 0)
     {
-        for(int i=0; i<det_num; i++)
+        for (int i = 0; i < det_num; i++)
             unmatched_detections.push_back(i);
         return;
     }
 
-    std::vector<std::vector<double>> iou_matrix;
-    iou_matrix.resize(det_num, vector<double>(trk_num, 0));
-
-    for(int i=0; i<det_num; i++)
-        for(int j=0; j<trk_num; j++)
+    for (int i = 0; i < det_num; i++)
+        for (int j = 0; j < trk_num; j++)
             // use 1-iou because the hungarian algorithm computes a minimum-cost assignment.
             iou_matrix[i][j] = 1 - compute_iou(dets[i].box, trks[j].box);
 
@@ -82,13 +80,14 @@ static void AssociateDetectionsToTrackers(const std::vector<DetectionBox> &dets,
     std::vector<int> assignment;
 
     // the resulting assignment is [detection : tracker], with len=preNum
+
     hungalgo.Solve(iou_matrix, assignment);
 
-    for(int i=0; i<det_num; i++)
+    for (int i = 0; i < det_num; i++)
     {
         int j = assignment[i];
         // unassigned label will be set as -1 in the assignment algorithm
-        if((j != -1) && (1-iou_matrix[i][j] >= iou_threshold))
+        if ((j != -1) && (1 - iou_matrix[i][j] >= iou_threshold))
         {
             std::vector<int> match = {i, j};
             matches.push_back(match);
@@ -97,23 +96,23 @@ static void AssociateDetectionsToTrackers(const std::vector<DetectionBox> &dets,
             unmatched_detections.push_back(i);
     }
 
-    for(int i=0; i<trk_num; i++)
-        for(int j=0; j<matches.size(); j++)
-            if(i != matches[j][1]) unmatched_trackers.push_back(i);
+    for (int i = 0; i < trk_num; i++)
+        for (int j = 0; j < matches.size(); j++)
+            if (i != matches[j][1])
+                unmatched_trackers.push_back(i);
 }
-
 
 std::vector<TrackingBox> Sort::Update(const std::vector<DetectionBox> &dets)
 {
     m_frame_count += 1;
     std::vector<TrackingBox> trks;
 
-    for(auto it = m_trackers.begin(); it != m_trackers.end();)
+    for (auto it = m_trackers.begin(); it != m_trackers.end();)
     {
         TrackingBox trk;
         trk.box = it->Predict();
 
-        if(trk.box.x >= 0 && trk.box.y >=0)
+        if (trk.box.x >= 0 && trk.box.y >= 0)
         {
             trks.push_back(trk);
             it++;
@@ -124,21 +123,27 @@ std::vector<TrackingBox> Sort::Update(const std::vector<DetectionBox> &dets)
         }
     }
 
+    if (dets.empty())
+    {
+        // 没有检测到目标时，输出预测框
+        printf("no detections!\n");
+        return trks;
+    }
+
     std::vector<std::vector<int>> matches;
     std::vector<int> unmatched_detections, unmatched_trackers;
 
     AssociateDetectionsToTrackers(dets, trks, m_iou_threshold, matches, unmatched_detections, unmatched_trackers);
 
     // update matched trackers with assigned detections.
-    for(auto &m : matches)
+    for (auto &m : matches)
     {
         m_trackers[m[1]].Update(dets[m[0]].box);
         m_trackers[m[1]].m_det_name = std::string(dets[m[0]].det_name);
     }
-        
 
     // create and initialise new trackers for unmatched detections
-    for(auto &d : unmatched_detections)
+    for (auto &d : unmatched_detections)
     {
         KalmanTracker tracker = KalmanTracker(dets[d].box);
         tracker.m_det_name = std::string(dets[d].det_name);
@@ -147,9 +152,13 @@ std::vector<TrackingBox> Sort::Update(const std::vector<DetectionBox> &dets)
 
     trks.clear();
     // get trackers' output
-    for(auto it = m_trackers.begin(); it != m_trackers.end(); it++)
+    for (auto it = m_trackers.begin(); it != m_trackers.end(); it++)
     {
-        if(((*it).m_time_since_update < 1) && ((*it).m_hit_streak >= m_min_hits || m_frame_count <= m_min_hits))
+        // if (((*it).m_time_since_update < 1) && ((*it).m_hit_streak >= m_min_hits || m_frame_count <= m_min_hits))
+        /*
+        只有那些最近被检测到的，并且是稳定的（被连续检测到多次），或者是在视频的最初几帧的跟踪器，才会被认为是有效的，并且会输出它们的跟踪框。
+        */
+       if (((*it).m_time_since_update < m_max_age) && ((*it).m_hit_streak >= m_min_hits || m_frame_count <= m_min_hits))
         {
             TrackingBox trk;
             trk.box = it->GetState();
@@ -159,7 +168,7 @@ std::vector<TrackingBox> Sort::Update(const std::vector<DetectionBox> &dets)
         }
 
         // remove dead tracklet
-        if((*it).m_time_since_update > m_max_age)
+        if ((*it).m_time_since_update > m_max_age)
         {
             it = m_trackers.erase(it);
             it--;
@@ -167,5 +176,3 @@ std::vector<TrackingBox> Sort::Update(const std::vector<DetectionBox> &dets)
     }
     return trks;
 }
-
-
